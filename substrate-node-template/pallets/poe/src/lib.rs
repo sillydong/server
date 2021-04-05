@@ -4,7 +4,7 @@
 /// Learn more about FRAME and the core library of Substrate FRAME pallets:
 /// https://substrate.dev/docs/en/knowledgebase/runtime/frame
 
-use frame_support::{ensure, decl_module, decl_storage, decl_event, decl_error, dispatch, traits::Get};
+use frame_support::{ensure, decl_module, decl_storage, decl_event, decl_error, dispatch};
 use frame_system::ensure_signed;
 use sp_std::prelude::*;
 
@@ -37,6 +37,7 @@ decl_event!(
 	pub enum Event<T> where AccountId = <T as frame_system::Trait>::AccountId {
 		ClaimCreated(AccountId, Vec<u8>),
 		ClaimRevoked(AccountId, Vec<u8>),
+		ClaimTransfered(AccountId, AccountId, Vec<u8>),
 	}
 );
 
@@ -69,7 +70,7 @@ decl_module! {
 			Proofs::<T>::insert(&claim, (sender.clone(), frame_system::Module::<T>::block_number()));
 			Self::deposit_event(RawEvent::ClaimCreated(sender, claim));
 
-			Ok(());
+			Ok(())
 		}
 
 		#[weight = 0]
@@ -85,7 +86,24 @@ decl_module! {
 
 			Self::deposit_event(RawEvent::ClaimRevoked(sender, claim));
 
-			Ok(());
+			Ok(())
+		}
+
+		#[weight = 0]
+		pub fn transfer_claim(origin, receiver: T::AccountId, claim: Vec<u8>) -> dispatch::DispatchResult{
+			let sender = ensure_signed(origin)?;
+
+			ensure!(Proofs::<T>::contains_key(&claim), Error::<T>::ClaimNotExist);
+
+			let (owner, _block_number) = Proofs::<T>::get(&claim);
+			ensure!(owner == sender, Error::<T>::NotClaimOwner);
+
+			Proofs::<T>::remove(&claim);
+			Proofs::<T>::insert(&claim, (receiver.clone(), <frame_system::Module::<T>>::block_number()));
+
+			Self::deposit_event(RawEvent::ClaimTransfered(sender, receiver, claim));
+
+			Ok(())
 		}
 	}
 }
